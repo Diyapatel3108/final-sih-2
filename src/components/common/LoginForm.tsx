@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from '@/components/ui/label';
 
+import { useAuth } from '@/components/layout/AuthContext';
+
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,23 +29,6 @@ export default function LoginForm() {
 
     if (error) {
       setError(error.message);
-    } else if (data.user) {
-      const { data: userRole, error: roleError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
-      
-      if (roleError) {
-        setError('Could not determine user role.');
-      } else if (userRole && userRole.role === role) {
-        router.push(`/${userRole.role}/dashboard`);
-      } else if (userRole && role === 'admin' && userRole.role === 'administrator') {
-        router.push(`/administrator/dashboard`);
-      } else {
-        setError('You are not authorized to log in with this role.');
-        supabase.auth.signOut();
-      }
     }
   };
 

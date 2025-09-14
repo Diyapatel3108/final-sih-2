@@ -35,7 +35,7 @@ import { Badge } from '@/components/ui/badge';
 
 import { useAuth } from '@/components/layout/AuthContext';
 export default function AttendancePage() {
-  const { profile: student, loading } = useAuth();
+  const { user: student, loading } = useAuth();
   const [weeklyAttendance, setWeeklyAttendance] = useState<any[]>([]);
   const [summaryStats, setSummaryStats] = useState<any | null>(null);
   const [chartData, setChartData] = useState<any[]>([]);

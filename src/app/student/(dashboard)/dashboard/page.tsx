@@ -43,7 +43,7 @@ const actionItems = [
 ]
 
 export default function StudentDashboard() {
-  const { profile: student, loading } = useAuth();
+  const { user: student, loading } = useAuth();
   const [classes, setClasses] = useState<any[]>([]);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function StudentDashboard() {
   const lectures: Lecture[] = classes?.map((c: any) => ({
     time: c.classes.schedule || "N/A",
     subject: c.classes.name,
-    professor: c.classes.users.name,
+    professor: c.classes.users?.name || "N/A",
     room: c.classes.room || "N/A",
     status: c.classes.status || "N/A",
   })) || [];
@@ -78,15 +78,15 @@ export default function StudentDashboard() {
       <Card className="bg-gradient-to-r from-primary to-purple-500 text-primary-foreground border-0 shadow-lg">
         <CardContent className="p-6 flex items-center gap-6">
           <Avatar className="h-20 w-20 border-4 border-white/30">
-            <AvatarImage src={student.avatar_url || `https://i.pravatar.cc/150?u=${student.id}`} alt={student.name} data-ai-hint="student person" />
-            <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
+            <AvatarImage src={student.profile.avatar_url || `https://i.pravatar.cc/150?u=${student.id}`} alt={student.profile.name} data-ai-hint="student person" />
+            <AvatarFallback>{student.profile.name.charAt(0)}</AvatarFallback>
           </Avatar>
           <div>
-            <h1 className="text-3xl font-bold">Welcome back, {student.name}!</h1>
-            <p className="text-primary-foreground/90">{student.department}, Semester 4</p>
+            <h1 className="text-3xl font-bold">Welcome back, {student.profile.name}!</h1>
+            <p className="text-primary-foreground/90">{student.profile.department}, Semester 4</p>
             <div className="flex items-center gap-2 mt-2">
-              <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">{student.rfid_id}</Badge>
-              <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">{student.scholar_level || 'N/A'}</Badge>
+              <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">{student.profile.rfid_id}</Badge>
+              <Badge variant="secondary" className="bg-white/20 text-primary-foreground border-0">{student.profile.scholar_level || 'N/A'}</Badge>
             </div>
           </div>
         </CardContent>

@@ -287,48 +287,53 @@ export default function ManagementPage() {
             </Card>
             <Dialog open={isAddStudentDialogOpen} onOpenChange={setIsAddStudentDialogOpen}>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add Student to Class</DialogTitle>
-                        <DialogDescription>
-                            Select a student and a class to add them to.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="class">Class</Label>
-                            <Select onValueChange={setSelectedClass}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a class" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {classes.map((cls) => (
-                                        <SelectItem key={cls.id} value={cls.id}>
-                                            {cls.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAddStudent();
+                    }}>
+                        <DialogHeader>
+                            <DialogTitle>Add Student to Class</DialogTitle>
+                            <DialogDescription>
+                                Select a student and a class to add them to.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="class">Class</Label>
+                                <Select onValueChange={setSelectedClass}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a class" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {classes.map((cls) => (
+                                            <SelectItem key={cls.id} value={cls.id}>
+                                                {cls.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="student">Student</Label>
+                                <Select onValueChange={setSelectedStudent}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a student" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {students.map((student) => (
+                                            <SelectItem key={student.id} value={student.id}>
+                                                {student.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="student">Student</Label>
-                            <Select onValueChange={setSelectedStudent}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a student" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {students.map((student) => (
-                                        <SelectItem key={student.id} value={student.id}>
-                                            {student.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsAddStudentDialogOpen(false)}>Cancel</Button>
-                        <Button onClick={handleAddStudent}>Add Student</Button>
-                    </DialogFooter>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsAddStudentDialogOpen(false)}>Cancel</Button>
+                            <Button type="submit">Add Student</Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
             <Dialog open={isEditClassDialogOpen} onOpenChange={setIsEditClassDialogOpen}>

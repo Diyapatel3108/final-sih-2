@@ -266,7 +266,7 @@ const Activity = ({ youtubeLinks, notes }: { youtubeLinks: YouTubeLink, notes: a
 };
 
 export default function ActivityPage() {
-  const { profile: student, loading } = useAuth();
+  const { user: student, loading } = useAuth();
   const [youtubeLinks, setYoutubeLinks] = useState<YouTubeLink | null>(null);
   const [notes, setNotes] = useState<any | null>(null);
 

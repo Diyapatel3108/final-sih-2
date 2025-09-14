@@ -32,7 +32,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function NotificationPage() {
-  const { profile: student, loading } = useAuth();
+  const { user: student, loading } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
 
 
