@@ -5,50 +5,44 @@ import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: User | null;
-  profile: any | null;
+  user: (User & { profile: any }) | null;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  profile: null,
   loading: true,
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<any | null>(null);
+  const [user, setUser] = useState<(User & { profile: any }) | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getActiveSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-
-      // Profile is now fetched in onAuthStateChange
+    const fetchUser = async (session: any) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        setUser({ ...session.user, profile: profile || null });
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     };
 
+    const getActiveSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      fetchUser(session);
+    };
+    
     getActiveSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-            .then(({ data: profileData }) => {
-              console.log('Fetched profile data:', profileData);
-              setProfile(profileData);
-            });
-        } else {
-          setProfile(null);
-        }
-        setLoading(false);
+        fetchUser(session);
       }
     );
 
@@ -58,7 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading }}>
+    <AuthContext.Provider value={{ user, loading }}>
       {children}
     </AuthContext.Provider>
   );

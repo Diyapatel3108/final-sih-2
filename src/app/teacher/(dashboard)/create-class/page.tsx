@@ -40,18 +40,24 @@ export default function CreateClassPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      const { error: insertError } = await supabase
-        .from('classes')
-        .insert([{ name, code, teacher_id: user.id }]);
-      
-      if (insertError) {
-        setError(insertError.message);
+      const response = await fetch('/api/class/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, code, teacher_id: user.id }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to create class');
       } else {
+        const responseData = await response.json();
         toast({
           title: "Class created successfully!",
           description: (
             <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
-              <code className="text-white">{JSON.stringify(data, null, 2)}</code>
+              <code className="text-white">{JSON.stringify(responseData, null, 2)}</code>
             </pre>
           ),
         });

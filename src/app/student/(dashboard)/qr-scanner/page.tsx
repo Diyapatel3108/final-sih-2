@@ -1,124 +1,107 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Camera, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/components/layout/AuthContext';
-import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import QrScanner from 'react-qr-scanner';
-import QrScannerHandler from '@/components/common/QrScannerHandler';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 
-type ScanStatus = 'idle' | 'scanning' | 'processing' | 'success' | 'failure';
+const QrScanner = dynamic(() => import('react-qr-scanner'), { ssr: false }) as React.ComponentType<any>;
 
-export default function QrScannerPage() {
-  const [status, setStatus] = useState<ScanStatus>('idle');
-  const [passkeyValue, setPasskeyValue] = useState('');
-  const { toast } = useToast();
+const QRScannerComponent = () => {
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
+  const { user } = useAuth();
 
-  const { user, loading } = useAuth();
-  const handleScannedToken = useCallback(async (token: string) => {
-    setStatus('processing');
-
-    if (!user) {
-        setStatus('failure');
-        toast({ variant: 'destructive', title: 'Not Authenticated', description: 'You must be logged in to mark attendance.' });
-        return;
-    }
-
-    try {
-      const response = await fetch(`/api/attendance/verify?token=${token}&studentId=${user.id}`);
-      if (response.ok) {
-        setStatus('success');
-        toast({ title: "Success!", description: "Attendance marked. You may be asked for a passkey." });
-      } else {
+  const handleScan = async (result: { text: string } | null) => {
+    if (result) {
+      try {
+        setScannerActive(false);
+        const token = result.text;
+        
+        const response = await fetch(
+          `/api/attendance/verify?token=${encodeURIComponent(token)}&studentId=${user?.id}`,
+          { method: 'GET' }
+        );
+        
         const data = await response.json();
-        setStatus('failure');
-        toast({ variant: 'destructive', title: 'Verification Failed', description: data.error || 'Please try again.' });
+        
+        if (response.ok) {
+          setSuccess(true);
+          setError('');
+        } else {
+          setError(data.error || 'Attendance verification failed');
+        }
+      } catch (err) {
+        console.error('Error verifying attendance:', err);
+        setError('Failed to verify attendance. Please try again.');
       }
-    } catch (error) {
-      setStatus('failure');
-      toast({ variant: 'destructive', title: 'Network Error', description: 'Could not connect to the server.' });
     }
-  }, [user, toast]);
+  };
 
+  const handleError = (error: any) => {
+    console.error('QR Scanner error:', error);
+    if (error.name === 'NotAllowedError') {
+      setError('Camera permission denied. Please allow camera access.');
+    } else if (error.name === 'NotFoundError') {
+      setError('No camera found on this device.');
+    } else {
+      setError('Error accessing camera: ' + error.message);
+    }
+  };
 
+  const startScanner = () => {
+    setError('');
+    setSuccess(false);
+    setScannerActive(true);
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/40 p-4 sm:p-8">
-      <Suspense fallback={<div>Loading...</div>}>
-        <QrScannerHandler handleToken={handleScannedToken} />
-      </Suspense>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle>Mark Attendance</CardTitle>
           <CardDescription>Scan the QR code from your teacher.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-6">
-          <div className="w-full aspect-square bg-secondary rounded-lg flex items-center justify-center border-2 border-dashed overflow-hidden">
-            {status === 'scanning' ? (
-              <QrScanner
-                delay={300}
-                onError={(error: any) => {
-                  console.error(error);
-                  toast({ variant: 'destructive', title: 'Scanner Error', description: 'Could not access the camera.' });
-                  setStatus('idle');
-                } }
-                onScan={(data: any) => {
-                  if (data) {
-                    handleScannedToken(data.text);
-                  }
-                } }
-                style={{ width: '100%' }} />
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-4">
-                <Camera className="w-16 h-16 text-muted-foreground" />
-                <p>
-                  {status === 'processing' && 'Verifying...'}
-                  {status === 'success' && 'Attendance Marked!'}
-                  {status === 'failure' && 'Verification Failed.'}
-                  {status === 'idle' && 'Ready to scan'}
-                </p>
-              </div>
-            )}
-          </div>
+          {error && <Alert variant="destructive"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+          {success && <Alert variant="default"><AlertTitle>Success</AlertTitle><AlertDescription>Attendance recorded successfully!</AlertDescription></Alert>}
           
-          <Button
-            disabled={status === 'processing'}
-            size="lg"
-            className="w-full"
-            onClick={() => {
-              if (status === 'idle' || status === 'failure') {
-                setStatus('scanning');
-              } else {
-                setStatus('idle');
-              }
-            }}
-          >
-            {status === 'scanning' ? 'Scanning...' : (status === 'idle' ? 'Start Scan' : 'Try Again')}
-          </Button>
-
-          {status === 'success' && (
-            <div className="w-full animate-in fade-in duration-500 space-y-2">
-              <Input 
-                type="text" 
-                placeholder="Enter Passkey (if required)" 
-                value={passkeyValue} 
-                onChange={(e) => setPasskeyValue(e.target.value)} 
+          {!scannerActive ? (
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Camera className="w-16 h-16 text-muted-foreground" />
+              <Button onClick={startScanner}>Start Scanner</Button>
+            </div>
+          ) : (
+            <div className="w-full aspect-square bg-secondary rounded-lg flex items-center justify-center border-2 border-dashed overflow-hidden">
+              <QrScanner
+                onScan={handleScan}
+                onError={handleError}
+                constraints={{ video: { facingMode: 'environment' } }}
+                style={{ width: '100%' }}
               />
-              <Button className="w-full">Submit Passkey</Button>
+              <Button onClick={() => setScannerActive(false)} className="mt-4">Stop Scanner</Button>
             </div>
           )}
-
-          <Button variant="outline" asChild className="w-full">
+           <Button variant="outline" asChild className="w-full">
             <Link href="/student/dashboard"><ArrowLeft className="mr-2 h-4 w-4" />Back to Dashboard</Link>
           </Button>
         </CardContent>
       </Card>
     </div>
+  );
+};
+
+export default function QrScannerPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <QRScannerComponent />
+    </Suspense>
   );
 }

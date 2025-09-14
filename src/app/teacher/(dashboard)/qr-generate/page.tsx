@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -8,37 +7,40 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { Class } from '@/lib/types';
-
+import type { Class } from "@/lib/types";
+import QRCode from 'qrcode';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from "@/components/layout/AuthContext";
 
 const QR_EXPIRATION_SECONDS = 60;
 
 export default function GenerateQRPage() {
   const [selectedClass, setSelectedClass] = useState<string | undefined>(undefined);
   const [classes, setClasses] = useState<Class[]>([]);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [sessionInfo, setSessionInfo] = useState<{ id: string; className: string } | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
   const [passkey, setPasskey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [scannedStudents, setScannedStudents] = useState<any[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   
   const countdownIntervalRef = useRef<NodeJS.Timeout>();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchClasses = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data, error } = await supabase.from('classes').select('*').eq('teacher_id', user.id);
         if (data) {
           setClasses(data);
+        } else if (error) {
+            console.error("Error fetching classes: ", error)
         }
       }
     };
     fetchClasses();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     return () => {
@@ -48,93 +50,95 @@ export default function GenerateQRPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (countdown > 0) {
-      countdownIntervalRef.current = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-    } else {
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-      }
-      if (qrCodeUrl) {
-          setQrCodeUrl(null); // Expire the QR code
-          setSessionInfo(null);
-      } else if (qrCodeUrl) {
-        setQrCodeUrl(null); // Expire the QR code
-        setSessionInfo(null);
-        // After QR code expires, generate and show passkey for 20 seconds
-        const newPasskey = Math.random().toString(36).substring(2, 8).toUpperCase();
-        setPasskey(newPasskey);
-        setCountdown(20);
-      } else if (passkey) {
-        setPasskey(null); // Expire the passkey
-      }
-    }
-
-    return () => {
-        if (countdownIntervalRef.current) {
-            clearInterval(countdownIntervalRef.current);
+  const startCountdown = () => {
+    setCountdown(QR_EXPIRATION_SECONDS);
+    countdownIntervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current as NodeJS.Timeout);
+          setQrCode(null);
+          return 0;
         }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    
+    const channel = supabase
+      .channel(`attendance-${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'attendance',
+          filter: `session_id=eq.${sessionId}`
+        },
+        (payload) => {
+          setAttendanceRecords(prev => [...prev, payload.new]);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime connected');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime connection error');
+          setError('Realtime connection failed');
+        }
+      });
+    
+    return () => {
+      supabase.removeChannel(channel);
     };
-  }, [countdown, qrCodeUrl, passkey]);
-
- useEffect(() => {
-   if (sessionInfo) {
-     const channel = supabase
-       .channel(`attendance:${sessionInfo.id}`)
-       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance', filter: `session_id=eq.${sessionInfo.id}` }, (payload) => {
-         setScannedStudents((prev) => [...prev, payload.new]);
-       })
-       .subscribe();
-
-     return () => {
-       supabase.removeChannel(channel);
-     };
-   }
- }, [sessionInfo]);
+  }, [sessionId]);
 
 
   const handleGenerateQR = async () => {
     if (!selectedClass) {
-        setError("Please select a class first.");
-        return;
+      setError('Please select a class');
+      return;
     }
-    const classDetails = classes.find(c => c.id === selectedClass);
-    if (!classDetails) {
-        setError("Could not find the selected class details.");
-        return;
-    }
-
+    
     setIsLoading(true);
-    setError(null);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-
+    setError('');
+    
     try {
+      // Create session
       const response = await fetch('/api/session/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ class_id: selectedClass }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: selectedClass })
       });
-
+      
       if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('Failed to create session:', errorBody);
         throw new Error('Failed to create session');
       }
 
-      const { sessionId } = await response.json();
+      const { sessionId, token } = await response.json();
       
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(sessionId)}`;
+      setSessionId(sessionId);
       
-      setQrCodeUrl(qrApiUrl);
-      setSessionInfo({ id: sessionId, className: classDetails.name });
-      setCountdown(60);
-
+      // Generate QR code with token
+      const qrDataUrl = await QRCode.toDataURL(token, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      });
+      
+      setQrCode(qrDataUrl);
+      startCountdown();
+      setAttendanceRecords([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred while generating the QR code.');
-      setQrCodeUrl(null);
-      setSessionInfo(null);
+      console.error('Error generating QR code:', err);
+      setError('Failed to generate QR code. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -174,11 +178,11 @@ export default function GenerateQRPage() {
           )}
 
           <div className="w-full flex flex-col items-center justify-center p-4 min-h-[320px]">
-            {qrCodeUrl ? (
+            {qrCode ? (
                 <div className="flex flex-col items-center gap-4 text-center">
-                    <Image src={qrCodeUrl} alt="Generated QR Code" width={300} height={300} priority />
+                    <Image src={qrCode} alt="Generated QR Code" width={300} height={300} priority />
                     <div className='space-y-1'>
-                        <p className="font-semibold">Session for {sessionInfo?.className}</p>
+                        <p className="font-semibold">Session for {classes.find(c => c.id === selectedClass)?.name}</p>
                         <p className="text-sm text-muted-foreground">Expires in {countdown} seconds</p>
                     </div>
                 </div>
@@ -192,7 +196,7 @@ export default function GenerateQRPage() {
                  <div className="w-[300px] h-[300px] bg-secondary rounded-lg flex flex-col items-center justify-center border-2 border-dashed">
                     <QrCode className="w-16 h-16 text-muted-foreground" />
                     <p className="mt-4 text-sm text-muted-foreground text-center px-4">
-                         {sessionInfo ? 'QR Code expired. Generate a new one.' : 'QR code will appear here once generated.'}
+                         {sessionId ? 'QR Code expired. Generate a new one.' : 'QR code will appear here once generated.'}
                     </p>
                  </div>
              )}
@@ -206,9 +210,9 @@ export default function GenerateQRPage() {
                 <CardDescription>Students who have successfully scanned the QR code.</CardDescription>
             </CardHeader>
             <CardContent>
-                {scannedStudents.length > 0 ? (
+                {attendanceRecords.length > 0 ? (
                     <ul>
-                        {scannedStudents.map((student) => (
+                        {attendanceRecords.map((student: any) => (
                             <li key={student.id}>{student.student_name}</li>
                         ))}
                     </ul>

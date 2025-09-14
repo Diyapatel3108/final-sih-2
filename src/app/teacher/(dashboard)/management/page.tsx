@@ -1,4 +1,3 @@
-
 "use client";
 import { DashboardHeader } from '@/components/layout/DashboardHeader';
 import { Button } from '@/components/ui/button';
@@ -29,7 +28,7 @@ import { useAuth } from "@/components/layout/AuthContext";
 import { useEffect, useState } from "react";
 
 export default function ManagementPage() {
-    const { profile: teacher, loading } = useAuth();
+    const { user, loading } = useAuth();
     const [classes, setClasses] = useState<any[]>([]);
     const [students, setStudents] = useState<any[]>([]);
     const [isAddClassDialogOpen, setIsAddClassDialogOpen] = useState(false);
@@ -43,7 +42,7 @@ export default function ManagementPage() {
 
 
     const fetchClasses = async () => {
-        if (teacher) {
+        if (user) {
             const { data, error } = await supabase
                 .from('classes')
                 .select(`
@@ -52,18 +51,18 @@ export default function ManagementPage() {
                     code,
                     student_classes ( count )
                 `)
-                .eq('teacher_id', teacher.id);
+                .eq('teacher_id', user.id);
 
             if (error) {
                 console.error('Error fetching classes:', error);
             } else {
-                setClasses(data as any);
+                setClasses(data || []);
             }
         }
     };
 
     const handleCreateClass = async () => {
-        if (!teacher) return;
+        if (!user) return;
 
         const response = await fetch('/api/class/create', {
             method: 'POST',
@@ -73,7 +72,6 @@ export default function ManagementPage() {
             body: JSON.stringify({
                 name: newClassName,
                 code: newClassCode,
-                teacher_id: teacher.id,
             }),
         });
 
@@ -83,17 +81,15 @@ export default function ManagementPage() {
             setIsAddClassDialogOpen(false);
             fetchClasses();
         } else {
-            // Handle error
-            console.error('Failed to create class');
+            const errorData = await response.json();
+            console.error('Failed to create class:', errorData);
         }
     };
 
     const fetchStudents = async () => {
-        if (teacher) {
-            // This is a placeholder. You might need a more complex query to get all students
-            // in all of the teacher's classes.
+        if (user) {
             const { data, error } = await supabase
-                .from('profiles')
+                .from('users')
                 .select('*')
                 .eq('role', 'student');
 
@@ -160,16 +156,16 @@ export default function ManagementPage() {
     useEffect(() => {
         fetchClasses();
         fetchStudents();
-    }, [teacher]);
+    }, [user]);
 
     const fetchStudentsForClass = async (classId: string) => {
         const { data, error } = await supabase
             .from('student_classes')
-            .select('profiles (*)')
+            .select('users!inner(*)')
             .eq('class_id', classId);
 
         if (data) {
-            const students = data.map((item: any) => item.profiles);
+            const students = data.map((item: any) => item.users).filter(Boolean);
             setStudents(students);
         }
     };
@@ -179,7 +175,7 @@ export default function ManagementPage() {
         return <div>Loading...</div>;
     }
 
-    if (!teacher) {
+    if (!user) {
         return <div>Please log in to view this page.</div>;
     }
     const studentData = students;
@@ -205,7 +201,7 @@ export default function ManagementPage() {
                               <li key={cls.id} className="flex items-center justify-between p-3 bg-secondary rounded-lg">
                                   <div>
                                       <p className="font-semibold">{cls.name} ({cls.code})</p>
-                                      <p className="text-sm text-muted-foreground">{cls.student_classes[0].count} students</p>
+                                      <p className="text-sm text-muted-foreground">{cls.student_classes[0]?.count || 0} students</p>
                                   </div>
                                   <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
